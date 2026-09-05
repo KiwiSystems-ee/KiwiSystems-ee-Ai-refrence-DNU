@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Log in · {{ brand }}</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+
+<div class="page-center">
+  <div class="card" id="step-password">
+    {% include '_brand.html' %}
+    <h2>Log in</h2>
+    <p>Welcome back. Log in to start chatting.</p>
+
+    <label for="username">Username</label>
+    <input type="text" id="username" autocomplete="username">
+
+    <label for="password">Password</label>
+    <input type="password" id="password" autocomplete="current-password" onkeydown="if(event.key==='Enter') doLogin()">
+
+    <button class="primary" onclick="doLogin()">Log in</button>
+    <div class="error" id="error"></div>
+
+    <div class="switch-link">Don't have an account? <a href="/signup">Sign up</a></div>
+  </div>
+
+  <div class="card" id="step-2fa" style="display:none;">
+    {% include '_brand.html' %}
+    <h2>Enter your code</h2>
+    <p>We emailed a 6-digit code to the address on your account.</p>
+
+    <label for="code">Verification code</label>
+    <input type="text" id="code" inputmode="numeric" autocomplete="one-time-code" placeholder="123456" onkeydown="if(event.key==='Enter') doVerify()">
+
+    <button class="primary" onclick="doVerify()">Verify</button>
+    <div class="error" id="verify-error"></div>
+
+    <div class="switch-link"><a href="#" onclick="resendCode(); return false;">Resend code</a></div>
+  </div>
+</div>
+
+<footer class="site-footer">
+  &copy; {{ copyright_year }} {{ brand }}. All rights reserved.
+  <a href="/terms">Terms of Use</a> · <a href="/privacy">Privacy Policy</a>
+</footer>
+
+<script src="{{ url_for('static', filename='cookie-consent.js') }}"></script>
+<script>
+let pendingUsername = '';
+
+async function doLogin() {
+  const username = document.getElementById('username').value.trim();
+  const password = document.getElementById('password').value;
+  const errorEl = document.getElementById('error');
+  errorEl.textContent = '';
+
+  if (!username || !password) {
+    errorEl.textContent = 'Enter a username and password.';
+    return;
+  }
+
+  const res = await fetch('/api/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username, password })
+  });
+  const data = await res.json();
+
+  if (!data.ok) {
+    errorEl.textContent = data.error || 'Login failed';
+    return;
+  }
+
+  if (data.requires_2fa) {
+    pendingUsername = username;
+    document.getElementById('step-password').style.display = 'none';
+    document.getElementById('step-2fa').style.display = 'block';
+  } else {
+    window.location.href = '/';
+  }
+}
+
+async function doVerify() {
+  const code = document.getElementById('code').value.trim();
+  const errorEl = document.getElementById('verify-error');
+  errorEl.textContent = '';
+
+  const res = await fetch('/api/login/verify-2fa', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username: pendingUsername, code })
+  });
+  const data = await res.json();
+  if (data.ok) {
+    window.location.href = '/';
+  } else {
+    errorEl.textContent = data.error || 'Verification failed';
+  }
+}
+
+async function resendCode() {
+  const errorEl = document.getElementById('verify-error');
+  errorEl.textContent = '';
+  const res = await fetch('/api/login/resend-2fa', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username: pendingUsername })
+  });
+  const data = await res.json();
+  errorEl.style.color = data.ok ? 'var(--kiwi-green)' : 'var(--error)';
+  errorEl.textContent = data.ok ? 'New code sent.' : (data.error || 'Could not resend code');
+}
+</script>
+
+</body>
+</html>
